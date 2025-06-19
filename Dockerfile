@@ -1,10 +1,29 @@
-FROM node:22-alpine
-ARG VERSION=latest
-RUN addgroup -S mcp && adduser -S mcp -G mcp
-RUN npm install -g mongodb-mcp-server@${VERSION}
-USER mcp
-WORKDIR /home/mcp
-ENTRYPOINT ["mongodb-mcp-server"]
-LABEL maintainer="MongoDB Inc <info@mongodb.com>"
-LABEL description="MongoDB MCP Server"
-LABEL version=${VERSION}
+# ----- Build Stage -----
+FROM node:lts-alpine AS builder
+WORKDIR /app
+
+# Copy package and configuration
+COPY package.json package-lock.json tsconfig.json tsconfig.build.json ./
+
+# Copy source code
+COPY src ./src
+
+# Install dependencies and build
+RUN npm ci && npm run build
+
+# ----- Production Stage -----
+FROM node:lts-alpine
+
+# Copy built artifacts
+COPY --from=builder /app/dist ./dist
+
+# Copy package.json for production install
+COPY package.json package-lock.json ./
+
+# Install only production dependencies
+RUN npm ci --production --ignore-scripts
+
+# Expose no ports (stdio only)
+
+# Default command
+CMD ["node", "dist/index.js"]
